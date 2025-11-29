@@ -1,0 +1,85 @@
+version: "3.8"
+
+services:
+  komga:
+    image: gotson/komga:latest
+    container_name: komga
+    ports:
+      - "25600:25600"
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./komga/config:/config
+      - ./shared-library:/library
+    restart: unless-stopped
+
+  manga-downloader:
+    build: ./manga-downloader
+    container_name: manga-downloader
+    environment:
+      - TZ=${TZ:-UTC}
+      - MANGADEX_BASE_URL=${MANGADEX_BASE_URL:-https://api.mangadex.org}
+      - USER_AGENT=${USER_AGENT:-KomgaDownloader/1.0 (+your_contact)}
+      - MANGADEX_USERNAME=${MANGADEX_USERNAME:-}
+      - MANGADEX_PASSWORD=${MANGADEX_PASSWORD:-}
+      - MANGADEX_CLIENT_ID=${MANGADEX_CLIENT_ID:-}
+      - MANGADEX_CLIENT_SECRET=${MANGADEX_CLIENT_SECRET:-}
+      - MANGADEX_TOKEN=${MANGADEX_TOKEN:-}
+      - LANGUAGE=${LANGUAGE:-en}
+      - USE_DATASAVER=${USE_DATASAVER:-true}
+      - AUTO_SCAN=${AUTO_SCAN:-true}
+      - LIBRARY_ROOT=/library
+      - WORK_DIR=/app/data
+      - KOMGA_BASE_URL=${KOMGA_BASE_URL:-http://komga:25600}
+      - KOMGA_LIBRARY_ID=${KOMGA_LIBRARY_ID:-}
+      - KOMGA_TOKEN=${KOMGA_TOKEN:-}
+    volumes:
+      - ./shared-library:/library
+      - ./manga-downloader/data:/app/data
+      - ./manga-downloader/config:/app/config
+    secrets:
+      - mangadex_username
+      - mangadex_password
+      - mangadex_client_id
+      - mangadex_client_secret
+      - mangadex_token
+    ports:
+      - "8000:8000"
+    depends_on:
+      - komga
+    restart: unless-stopped
+
+  scheduler-ui:
+    build: ./scheduler-ui
+    container_name: scheduler-ui
+    environment:
+      - DOWNLOADER_API_URL=http://manga-downloader:8000
+    ports:
+      - "8088:8080"
+    depends_on:
+      - manga-downloader
+    restart: unless-stopped
+  nginx:
+    image: nginx:alpine
+    container_name: komga-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - komga
+      - manga-downloader
+      - scheduler-ui
+    restart: unless-stopped
+
+secrets:
+  mangadex_username:
+    file: ./.secrets/mangadex_username
+  mangadex_password:
+    file: ./.secrets/mangadex_password
+  mangadex_client_id:
+    file: ./.secrets/mangadex_client_id
+  mangadex_client_secret:
+    file: ./.secrets/mangadex_client_secret
+  mangadex_token:
+    file: ./.secrets/mangadex_token
